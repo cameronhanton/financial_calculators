@@ -1,7 +1,7 @@
 {
   "name": "Financial Calculators",
   "short_name": "Fin Calcs",
-  "description": "Retirement nest egg and compound interest calculators that run entirely in your browser.",
+  "description": "Retirement nest egg, compound interest and Ontario paycheck calculators that run entirely in your browser.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -39,6 +39,12 @@
       "name": "Compound Interest",
       "short_name": "Compound",
       "url": "./compound-interest-calculator.html",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Ontario Paycheck",
+      "short_name": "Paycheck",
+      "url": "./paycheck-calculator.html",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
