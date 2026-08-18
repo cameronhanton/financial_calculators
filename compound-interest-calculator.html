@@ -132,6 +132,21 @@
   .pill.warn { color: var(--amber); background: rgba(217,119,6,.12); }
   .pill.bad { color: var(--danger); background: rgba(225,29,72,.10); }
 
+  /* Fee comparison */
+  .fees { padding: 18px 20px; }
+  .fees h3 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .fee-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .fee-cell .k { font-size: 12px; color: var(--muted); }
+  .fee-cell .v { font-size: 20px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .fee-cell .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .fee-cell.cost .v { color: var(--danger); }
+  .fee-note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  .fee-cell + .fee-cell { border-left: 1px solid var(--line); padding-left: 14px; }
+  @media (max-width: 560px) {
+    .fee-grid { grid-template-columns: 1fr; gap: 12px; }
+    .fee-cell + .fee-cell { border-left: none; padding-left: 0; border-top: 1px solid var(--line); padding-top: 12px; }
+  }
+
   /* Chart */
   .chart { padding: 18px 18px 12px; }
   .chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 8px 14px; }
@@ -140,6 +155,7 @@
   .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
   .legend .sw-int { background: rgba(16,185,129,.55); }
   .legend .sw-pri { background: rgba(100,116,139,.45); }
+  .legend .sw-fee { background: rgba(225,29,72,.35); }
   .toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
   .canvas-wrap { position: relative; width: 100%; height: 320px; }
   canvas { width: 100%; height: 100%; display: block; }
@@ -153,7 +169,11 @@
   table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
   th, td { text-align: right; padding: 9px 20px; border-top: 1px solid var(--line); }
   th:first-child, td:first-child { text-align: left; }
+  table.no-fees .fee-col { display: none; }
   thead th { position: sticky; top: 0; background: #fafbfc; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; z-index: 1; }
+  /* Six money columns can't fit a phone; the card scrolls sideways, so just
+     buy back what room we can rather than dropping columns. */
+  @media (max-width: 560px) { th, td { padding: 9px 11px; } }
 
   footer { margin-top: 26px; font-size: 12px; color: var(--muted); text-align: center; }
 </style>
@@ -222,6 +242,13 @@
         </div>
 
         <div class="field">
+          <label for="fee">Investment fees <span class="val" id="feeVal">0.50%</span></label>
+          <input type="range" id="feeRange" min="0" max="3" step="0.05" value="0.5" />
+          <input type="number" id="fee" value="0.5" min="0" max="10" step="0.05" style="margin-top:8px" />
+          <div class="hint">The yearly MER or advisor fee, charged on your <strong>whole balance</strong> — not just the gains. Index ETFs run about 0.05–0.25%; Canadian mutual funds are often 1.5–2.5%.</div>
+        </div>
+
+        <div class="field">
           <label for="years">Years to grow</label>
           <input type="number" id="years" value="30" min="1" max="60" step="1" />
           <div class="hint">How long the money stays invested.</div>
@@ -249,13 +276,33 @@
             <div class="v" id="contributed">$0</div>
           </div>
           <div class="stat card">
-            <div class="k">Interest earned</div>
+            <div class="k" id="interestLabel">Interest earned</div>
             <div class="v" id="interest">$0</div>
           </div>
           <div class="stat card">
-            <div class="k">Effective annual yield</div>
+            <div class="k" id="apyLabel">Effective annual yield</div>
             <div class="v small"><span class="pill good" id="apy">7.00%</span></div>
           </div>
+        </div>
+
+        <div class="fees card">
+          <h3>With and without fees</h3>
+          <div class="fee-grid">
+            <div class="fee-cell">
+              <div class="k">If fees were 0%</div>
+              <div class="v" id="grossBalance">$0</div>
+            </div>
+            <div class="fee-cell">
+              <div class="k" id="feeCellLabel">After 0.50% in fees</div>
+              <div class="v" id="netBalance">$0</div>
+            </div>
+            <div class="fee-cell cost">
+              <div class="k">Fees take</div>
+              <div class="v" id="feeCost">$0</div>
+              <div class="sub" id="feeShare">—</div>
+            </div>
+          </div>
+          <div class="fee-note" id="feeNote"></div>
         </div>
 
         <div class="chart card">
@@ -264,6 +311,7 @@
             <div class="legend">
               <span><i class="sw-int"></i>Interest</span>
               <span><i class="sw-pri"></i>Contributions</span>
+              <span id="feeLegend"><i class="sw-fee"></i>Lost to fees</span>
             </div>
             <label class="toggle"><input type="checkbox" id="realToggle" /> Show in today's dollars</label>
           </div>
@@ -279,9 +327,9 @@
         <span class="note">Nominal dollars (what your statement would show)</span>
       </div>
       <div class="scroll">
-        <table>
+        <table id="detailTable">
           <thead>
-            <tr><th>Year</th><th>Start balance</th><th>Contributions</th><th>Interest</th><th>End balance</th></tr>
+            <tr><th>Year</th><th>Start balance</th><th>Contributions</th><th>Interest</th><th class="fee-col">Fees</th><th>End balance</th></tr>
           </thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -289,7 +337,7 @@
     </section>
 
     <footer>
-      Estimates only — not financial advice. Returns are assumed steady; real markets are not. Taxes and fees are not modelled.
+      Estimates only — not financial advice. Returns are assumed steady; real markets are not. Fees are modelled as a yearly percentage of your balance; taxes are not.
     </footer>
   </div>
 
@@ -314,6 +362,7 @@
       monthly: Math.max(0, parseFloat($('monthly').value) || 0),
       rate: (parseFloat($('rate').value) || 0) / 100,
       compounds: parseFloat($('compounds').value) || 12,
+      fee: Math.max(0, parseFloat($('fee').value) || 0) / 100,
       years: Math.max(1, Math.min(60, Math.round(parseFloat($('years').value) || 30))),
       infl: (parseFloat($('inflation').value) || 0) / 100,
       realDollars: $('realToggle').checked
@@ -324,29 +373,42 @@
   // Compounding frequency sets the effective annual yield; the month-by-month
   // walk then grows the balance at the equivalent monthly rate so that
   // contributions earn a fair share of a year's growth.
-  function simulate(inp) {
+  //
+  // Fees are modelled the way a real MER works: a slice of the *whole balance*
+  // taken every month, not a subtraction from the return. That is why a 7%
+  // return with a 2% fee nets a little under 5% — the fee is charged on the
+  // principal too, and on the money the fee itself would have earned.
+  function project(inp, feeRate) {
     const eff = Math.pow(1 + inp.rate / inp.compounds, inp.compounds) - 1;
     const monthlyFactor = Math.pow(1 + eff, 1 / 12);
+    const monthlyFee = feeRate / 12;
     const rows = [];
     let balance = inp.initial;
     let contributed = inp.initial;
+    let feesPaid = 0;
 
-    rows.push({ year: 0, start: inp.initial, balance: balance, contributed: contributed, interest: 0, yearContrib: 0, yearInterest: 0 });
+    rows.push({ year: 0, start: inp.initial, balance: balance, contributed: contributed, interest: 0, yearContrib: 0, yearInterest: 0, yearFees: 0, feesPaid: 0 });
 
     for (let y = 1; y <= inp.years; y++) {
       const start = balance;
-      let yearInterest = 0, yearContrib = 0;
+      let yearInterest = 0, yearContrib = 0, yearFees = 0;
       for (let m = 0; m < 12; m++) {
         const gain = balance * (monthlyFactor - 1);
         balance += gain;
         yearInterest += gain;
+        const fee = balance * monthlyFee;
+        balance -= fee;
+        yearFees += fee;
+        feesPaid += fee;
         balance += inp.monthly;
         contributed += inp.monthly;
         yearContrib += inp.monthly;
       }
+      // Each year reconciles: start + contributions + interest - fees = end.
       rows.push({
         year: y, start: start, balance: balance, contributed: contributed,
-        interest: balance - contributed, yearContrib: yearContrib, yearInterest: yearInterest
+        interest: balance - contributed, yearContrib: yearContrib, yearInterest: yearInterest,
+        yearFees: yearFees, feesPaid: feesPaid
       });
     }
 
@@ -355,9 +417,22 @@
       const d = inp.realDollars ? Math.pow(1 + inp.infl, r.year) : 1;
       r.display = r.balance / d;
       r.displayContrib = r.contributed / d;
+      r.displayFees = r.feesPaid / d;
     });
 
-    return { rows: rows, eff: eff };
+    return rows;
+  }
+
+  // Run it twice — once paying the fee, once fee-free — so the two can be
+  // shown side by side. The fee-free run is the honest "what you'd have had".
+  function simulate(inp) {
+    const eff = Math.pow(1 + inp.rate / inp.compounds, inp.compounds) - 1;
+    return {
+      rows: project(inp, inp.fee),
+      grossRows: project(inp, 0),
+      eff: eff,
+      netEff: (1 + eff) * Math.pow(1 - inp.fee / 12, 12) - 1
+    };
   }
 
   // --- Chart ---
@@ -392,7 +467,12 @@
     const plotH = H - pad.t - pad.b;
     const rows = sim.rows;
     const maxYear = rows[rows.length - 1].year || 1;
-    const maxVal = Math.max.apply(null, rows.map(r => Math.max(0, r.display)));
+    const gross = sim.grossRows;
+    // Scale to the fee-free line, which always sits at or above the net one.
+    const maxVal = Math.max(
+      Math.max.apply(null, rows.map(r => Math.max(0, r.display))),
+      Math.max.apply(null, gross.map(r => Math.max(0, r.display)))
+    );
     const scale = niceScale(maxVal, 5);
 
     const x = yr => pad.l + (maxYear === 0 ? 0 : (yr / maxYear) * plotW);
@@ -418,6 +498,21 @@
     for (let yr = 0; yr <= maxYear; yr += stepYr) {
       ctx.fillStyle = '#94a3b8';
       ctx.fillText('Yr ' + yr, x(yr), pad.t + plotH + 8);
+    }
+
+    // the gap fees opened up (between the net balance and the fee-free one)
+    if (inp.fee > 0) {
+      ctx.beginPath();
+      gross.forEach((r, i) => {
+        const px = x(r.year), py = y(Math.max(0, r.display));
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      for (let i = rows.length - 1; i >= 0; i--) {
+        ctx.lineTo(x(rows[i].year), y(Math.max(0, rows[i].display)));
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(225,29,72,.10)';
+      ctx.fill();
     }
 
     // interest band (between contributions and total balance)
@@ -470,6 +565,22 @@
     ctx.lineJoin = 'round';
     ctx.stroke();
 
+    // fee-free balance, dashed above the real one
+    if (inp.fee > 0) {
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      gross.forEach((r, i) => {
+        const px = x(r.year), py = y(Math.max(0, r.display));
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.strokeStyle = 'rgba(225,29,72,.60)';
+      ctx.lineWidth = 1.8;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // store geometry for hover
     chartState = { sim, inp, x, y, pad, plotW, plotH, maxYear, W, H };
 
@@ -495,8 +606,13 @@
         'Year ' + r.year,
         'Balance: ' + fmtFull.format(Math.round(Math.max(0, r.display))) + suffix,
         'Contributed: ' + fmtFull.format(Math.round(Math.max(0, r.displayContrib))),
-        'Interest: ' + fmtFull.format(Math.round(Math.max(0, r.display - r.displayContrib)))
+        (inp.fee > 0 ? 'Growth: ' : 'Interest: ') + fmtFull.format(Math.round(Math.max(0, r.display - r.displayContrib)))
       ];
+      if (inp.fee > 0) {
+        const g = gross[hoverIndex];
+        lines.push('Without fees: ' + fmtFull.format(Math.round(Math.max(0, g.display))));
+        lines.push('Fees so far: ' + fmtFull.format(Math.round(Math.max(0, r.displayFees))));
+      }
       ctx.font = '12px -apple-system, sans-serif';
       const bw = Math.max.apply(null, lines.map(l => ctx.measureText(l).width)) + 20;
       const bh = lines.length * 17 + 12;
@@ -531,9 +647,14 @@
     lastSim = sim; lastInp = inp;
 
     const last = sim.rows[sim.rows.length - 1];
+    const lastGross = sim.grossRows[sim.grossRows.length - 1];
     const totalInterest = Math.max(0, last.display - last.displayContrib);
+    const feeCost = Math.max(0, lastGross.display - last.display);
+    const grossGrowth = Math.max(0, lastGross.display - lastGross.displayContrib);
+    const hasFee = inp.fee > 0;
 
     $('headlineLabel').textContent = 'Balance after ' + last.year + ' year' + (last.year === 1 ? '' : 's')
+      + (hasFee ? ', after fees' : '')
       + (inp.realDollars ? " (today's dollars)" : '');
     $('future').textContent = fmtFull.format(Math.round(last.display));
     $('multiple').textContent = last.displayContrib > 0
@@ -541,16 +662,45 @@
       : '—';
 
     $('contributed').textContent = fmtFull.format(Math.round(last.displayContrib));
+    // With a fee in play, balance minus contributions is growth net of fees,
+    // so the label has to say so — the table still breaks out the gross figures.
+    $('interestLabel').textContent = hasFee ? 'Growth after fees' : 'Interest earned';
     $('interest').textContent = fmtFull.format(Math.round(totalInterest));
-    $('apy').textContent = (sim.eff * 100).toFixed(2) + '%';
+    $('apyLabel').textContent = hasFee ? 'Yield after fees' : 'Effective annual yield';
+    $('apy').textContent = (sim.netEff * 100).toFixed(2) + '%';
+
+    // fee comparison
+    $('grossBalance').textContent = fmtFull.format(Math.round(lastGross.display));
+    $('netBalance').textContent = fmtFull.format(Math.round(last.display));
+    $('feeCellLabel').textContent = hasFee
+      ? 'After ' + (inp.fee * 100).toFixed(2) + '% in fees'
+      : 'With no fees set';
+    $('feeCost').textContent = feeCost >= 1
+      ? '−' + fmtFull.format(Math.round(feeCost))
+      : fmtFull.format(0);
+    $('feeShare').textContent = (hasFee && grossGrowth > 0)
+      ? (feeCost / grossGrowth * 100).toFixed(1) + '% of the growth you would have had'
+      : 'Nothing — you keep it all';
+    // The cost above is bigger than the fees actually handed over, because the
+    // fee dollars also stop compounding. Spell that out — otherwise the Fees
+    // column in the table below looks like it contradicts this number.
+    const feesPaid = Math.max(0, last.displayFees);
+    $('feeNote').textContent = hasFee
+      ? fmtFull.format(Math.round(feesPaid)) + ' of that is fees you actually hand over. The rest — '
+        + fmtFull.format(Math.round(Math.max(0, feeCost - feesPaid)))
+        + ' — is the growth those dollars never got to earn.'
+      : 'Set a fee above to see what it would cost you over the years.';
+    $('feeLegend').style.display = hasFee ? '' : 'none';
 
     // table (always nominal)
+    $('detailTable').className = hasFee ? '' : 'no-fees';
     const tb = $('tbody');
     tb.innerHTML = sim.rows.filter(r => r.year > 0).map(r =>
       '<tr><td>' + r.year + '</td>'
       + '<td>' + fmtFull.format(Math.round(r.start)) + '</td>'
       + '<td>' + fmtFull.format(Math.round(r.yearContrib)) + '</td>'
       + '<td>' + fmtFull.format(Math.round(r.yearInterest)) + '</td>'
+      + '<td class="fee-col">' + (r.yearFees >= 0.5 ? '−' + fmtFull.format(Math.round(r.yearFees)) : fmtFull.format(0)) + '</td>'
       + '<td>' + fmtFull.format(Math.round(r.balance)) + '</td></tr>'
     ).join('');
 
@@ -575,11 +725,12 @@
   function onLeave() { if (lastSim) drawChart(lastSim, lastInp, null); }
 
   // --- Wire up ---
-  function bindPair(numId, rangeId, valId) {
+  function bindPair(numId, rangeId, valId, digits) {
     const n = $(numId), r = $(rangeId), v = $(valId);
+    const d = digits == null ? 1 : digits;
     const sync = (src) => {
       if (src === 'n') r.value = n.value; else n.value = r.value;
-      v.textContent = (parseFloat(n.value) || 0).toFixed(1) + '%';
+      v.textContent = (parseFloat(n.value) || 0).toFixed(d) + '%';
       render();
     };
     n.addEventListener('input', () => sync('n'));
@@ -588,6 +739,7 @@
 
   bindPair('rate', 'rateRange', 'rateVal');
   bindPair('inflation', 'inflationRange', 'inflationVal');
+  bindPair('fee', 'feeRange', 'feeVal', 2);
   ['initial', 'monthly', 'years'].forEach(id => $(id).addEventListener('input', render));
   $('compounds').addEventListener('change', render);
   $('realToggle').addEventListener('change', render);
