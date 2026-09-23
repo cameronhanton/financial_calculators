@@ -46,11 +46,13 @@
            display: inline-flex; align-items: center; gap: 9px; }
   .brand .mark { width: 22px; height: 22px; flex: none; }
   .brand i { color: var(--accent); font-style: normal; }
-  .nav-links { display: flex; gap: 4px; margin-left: auto; }
+  /* four links no longer fit a phone, so the row scrolls rather than wraps */
+  .nav-links { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
   .nav-links a { font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 7px 12px; border-radius: 8px; white-space: nowrap; }
   .nav-links a:hover { color: var(--ink); background: #f1f5f9; }
   .nav-links a.active { color: var(--accent-dark); background: rgba(16,185,129,.10); }
-  @media (max-width: 560px) {
+  @media (max-width: 620px) {
     .nav-inner { gap: 8px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
     .brand-text { display: none; }
     .nav-links a { padding: 6px 9px; font-size: 13px; }
@@ -106,6 +108,16 @@
   input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
   input[type="range"] { width: 100%; margin: 8px 0 0; accent-color: var(--accent); }
 
+  /* Mode toggle: solve for nest egg, or solve for income */
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: #f1f5f9; border-radius: 10px; margin-bottom: 18px; }
+  .seg button {
+    appearance: none; border: 0; background: transparent; border-radius: 7px; padding: 8px 6px;
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; line-height: 1.25;
+  }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--accent-dark); box-shadow: 0 1px 2px rgba(16,24,40,.10); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .field[hidden] { display: none; }
+
   /* Results */
   .results { display: flex; flex-direction: column; gap: 20px; }
   .headline { padding: 22px 24px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
@@ -155,9 +167,10 @@
         <span class="brand-text">Financial<i>&nbsp;/</i>&nbsp;Calculators</span>
       </a>
       <div class="nav-links">
-        <a href="retirement-calculator.html" class="active">Nest Egg</a>
+        <a href="retirement-calculator.html" class="active">Nest<span class="long"> Egg</span></a>
         <a href="compound-interest-calculator.html">Compound<span class="long"> Interest</span></a>
         <a href="paycheck-calculator.html">Paycheck</a>
+        <a href="options-wheel.html">Wheel</a>
       </div>
     </div>
   </nav>
@@ -165,7 +178,7 @@
   <div class="app">
     <header>
       <h1>Retirement Nest-Egg Calculator</h1>
-      <p>Enter the yearly income you want in retirement and your assumptions. Based on the <strong>4% rule</strong>, you need roughly 25× your annual spending invested. The chart projects how the balance evolves as it earns returns and you make inflation-adjusted withdrawals.</p>
+      <p>Work it either direction: enter the yearly income you want and see how much you need invested, or enter what you have invested and see the yearly income it can support. Based on the <strong>4% rule</strong>, you need roughly 25× your annual spending invested. The chart projects how the balance evolves as it earns returns and you make inflation-adjusted withdrawals.</p>
     </header>
 
     <div class="layout">
@@ -173,13 +186,27 @@
       <section class="inputs card">
         <h2>Your assumptions</h2>
 
-        <div class="field">
+        <div class="seg" role="group" aria-label="What to solve for">
+          <button type="button" id="modeIncome" aria-pressed="true">Start with income</button>
+          <button type="button" id="modeNest" aria-pressed="false">Start with nest egg</button>
+        </div>
+
+        <div class="field" id="incomeField">
           <label for="income">Desired yearly income</label>
           <div class="money-input">
             <span>$</span>
             <input type="number" id="income" value="40000" min="0" step="1000" />
           </div>
           <div class="hint">Pre-tax income you want your portfolio to provide each year.</div>
+        </div>
+
+        <div class="field" id="nestField" hidden>
+          <label for="nestInput">Amount invested</label>
+          <div class="money-input">
+            <span>$</span>
+            <input type="number" id="nestInput" value="1000000" min="0" step="10000" />
+          </div>
+          <div class="hint">What you have (or expect to have) in your portfolio on day one of retirement.</div>
         </div>
 
         <div class="field">
@@ -213,7 +240,7 @@
       <!-- RESULTS -->
       <section class="results">
         <div class="headline card">
-          <span class="label">You need invested</span>
+          <span class="label" id="headlineLabel">You need invested</span>
           <span class="big" id="nestEgg">$1,000,000</span>
           <span class="mult" id="multiple">25.0× annual income</span>
         </div>
@@ -278,11 +305,35 @@
     return '$' + Math.round(v);
   }
 
+  // --- Mode ---
+  // 'income': user gives desired income, we solve for the nest egg.
+  // 'nest':   user gives what they have invested, we solve for the income.
+  let mode = 'income';
+
+  function setMode(m) {
+    mode = m;
+    $('modeIncome').setAttribute('aria-pressed', m === 'income');
+    $('modeNest').setAttribute('aria-pressed', m === 'nest');
+    $('incomeField').hidden = m !== 'income';
+    $('nestField').hidden = m !== 'nest';
+    render();
+  }
+
   // --- Inputs ---
   function getInputs() {
     const wd = (parseFloat($('withdraw').value) || 0) / 100;
+    let income, nestEgg;
+    if (mode === 'nest') {
+      nestEgg = Math.max(0, parseFloat($('nestInput').value) || 0);
+      income = nestEgg * wd;
+    } else {
+      income = Math.max(0, parseFloat($('income').value) || 0);
+      nestEgg = wd > 0 ? income / wd : 0;
+    }
     return {
-      income: Math.max(0, parseFloat($('income').value) || 0),
+      mode: mode,
+      income: income,
+      nestEgg: nestEgg,
       ret: (parseFloat($('return').value) || 0) / 100,
       wd: wd,
       infl: (parseFloat($('inflation').value) || 0) / 100,
@@ -293,7 +344,7 @@
 
   // --- Simulation ---
   function simulate(inp) {
-    const nestEgg = inp.wd > 0 ? inp.income / inp.wd : 0;
+    const nestEgg = inp.nestEgg;
     const rows = [];
     let balance = nestEgg;
     let depletedYear = null;
@@ -453,8 +504,15 @@
     const sim = simulate(inp);
     lastSim = sim; lastInp = inp;
 
-    $('nestEgg').textContent = fmtFull.format(Math.round(sim.nestEgg));
-    $('multiple').textContent = inp.wd > 0 ? (1 / inp.wd).toFixed(1) + '× annual income' : '—';
+    if (inp.mode === 'nest') {
+      $('headlineLabel').textContent = 'You can expect each year';
+      $('nestEgg').textContent = fmtFull.format(Math.round(inp.income));
+      $('multiple').textContent = (inp.wd * 100).toFixed(1) + '% of nest egg';
+    } else {
+      $('headlineLabel').textContent = 'You need invested';
+      $('nestEgg').textContent = fmtFull.format(Math.round(sim.nestEgg));
+      $('multiple').textContent = inp.wd > 0 ? (1 / inp.wd).toFixed(1) + '× annual income' : '—';
+    }
     $('monthly').textContent = fmtFull.format(Math.round(inp.income / 12)) + '/mo';
 
     const last = sim.rows[sim.rows.length - 1];
@@ -525,7 +583,9 @@
   bindPair('withdraw', 'withdrawRange', 'withdrawVal');
   bindPair('return', 'returnRange', 'returnVal');
   bindPair('inflation', 'inflationRange', 'inflationVal');
-  ['income', 'years'].forEach(id => $(id).addEventListener('input', render));
+  ['income', 'nestInput', 'years'].forEach(id => $(id).addEventListener('input', render));
+  $('modeIncome').addEventListener('click', () => setMode('income'));
+  $('modeNest').addEventListener('click', () => setMode('nest'));
   $('realToggle').addEventListener('change', render);
 
   const cv = $('chart');

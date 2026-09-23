@@ -46,11 +46,13 @@
            display: inline-flex; align-items: center; gap: 9px; }
   .brand .mark { width: 22px; height: 22px; flex: none; }
   .brand i { color: var(--accent); font-style: normal; }
-  .nav-links { display: flex; gap: 4px; margin-left: auto; }
+  /* four links no longer fit a phone, so the row scrolls rather than wraps */
+  .nav-links { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
   .nav-links a { font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 7px 12px; border-radius: 8px; white-space: nowrap; }
   .nav-links a:hover { color: var(--ink); background: #f1f5f9; }
   .nav-links a.active { color: var(--accent-dark); background: rgba(16,185,129,.10); }
-  @media (max-width: 560px) {
+  @media (max-width: 620px) {
     .nav-inner { gap: 8px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
     .brand-text { display: none; }
     .nav-links a { padding: 6px 9px; font-size: 13px; }
@@ -186,9 +188,10 @@
         <span class="brand-text">Financial<i>&nbsp;/</i>&nbsp;Calculators</span>
       </a>
       <div class="nav-links">
-        <a href="retirement-calculator.html">Nest Egg</a>
+        <a href="retirement-calculator.html">Nest<span class="long"> Egg</span></a>
         <a href="compound-interest-calculator.html" class="active">Compound<span class="long"> Interest</span></a>
         <a href="paycheck-calculator.html">Paycheck</a>
+        <a href="options-wheel.html">Wheel</a>
       </div>
     </div>
   </nav>

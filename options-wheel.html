@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="A visual map of the options wheel strategy on RY — selling cash-secured puts, getting assigned, selling covered calls, and every branch in between." />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#10b981" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Fin Calcs" />
+<title>The RY Options Wheel</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --ink: #1f2a37;
+    --muted: #64748b;
+    --line: #e5e9f0;
+    --accent: #10b981;
+    --accent-dark: #0b8457;
+    --accent-tint: rgba(16,185,129,.10);
+    --own: #d97706;
+    --own-dark: #b45309;
+    --own-tint: rgba(217,119,6,.10);
+    --wire: #94a3b8;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1319;
+      --card: #161d26;
+      --ink: #e6ecf3;
+      --muted: #93a3b5;
+      --line: #26313d;
+      --accent: #34d399;
+      --accent-dark: #6ee7b7;
+      --accent-tint: rgba(52,211,153,.13);
+      --own: #f0a03a;
+      --own-dark: #fbbf24;
+      --own-tint: rgba(240,160,58,.13);
+      --wire: #61728a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1319;
+    --card: #161d26;
+    --ink: #e6ecf3;
+    --muted: #93a3b5;
+    --line: #26313d;
+    --accent: #34d399;
+    --accent-dark: #6ee7b7;
+    --accent-tint: rgba(52,211,153,.13);
+    --own: #f0a03a;
+    --own-dark: #fbbf24;
+    --own-tint: rgba(240,160,58,.13);
+    --wire: #61728a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Nav */
+  .nav { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; padding-top: env(safe-area-inset-top, 0px); }
+  .nav-inner {
+    max-width: 1080px; margin: 0 auto; height: 56px; display: flex; align-items: center; gap: 18px;
+    padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .brand { font-weight: 700; font-size: 15px; letter-spacing: -.01em; white-space: nowrap; color: var(--ink); text-decoration: none;
+           display: inline-flex; align-items: center; gap: 9px; }
+  .brand .mark { width: 22px; height: 22px; flex: none; }
+  .brand i { color: var(--accent); font-style: normal; }
+  /* four links no longer fit a phone, so the row scrolls rather than wraps */
+  .nav-links { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 7px 12px; border-radius: 8px; white-space: nowrap; }
+  .nav-links a:hover { color: var(--ink); background: var(--bg); }
+  .nav-links a.active { color: var(--accent-dark); background: var(--accent-tint); }
+  .nav-links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (max-width: 620px) {
+    .nav-inner { gap: 8px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+    .brand-text { display: none; }
+    .nav-links a { padding: 6px 9px; font-size: 13px; }
+    .nav-links .long { display: none; }
+  }
+
+  .app {
+    max-width: 1080px; margin: 0 auto; padding-top: 40px;
+    padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right));
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Page header */
+  header.page { max-width: 660px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--accent-dark); }
+  header.page h1 { margin: 8px 0 8px; font-size: 32px; line-height: 1.15; letter-spacing: -.028em; text-wrap: balance; }
+  header.page p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+  /* Figure */
+  figure.wheel { margin: 30px 0 0; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 22px 20px 18px; }
+  .fig-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .fig-scroll svg { display: block; width: 100%; min-width: 680px; height: auto; }
+  figcaption { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted); max-width: 62ch; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; font-size: 12.5px; font-weight: 600; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
+  .legend i { width: 11px; height: 11px; border-radius: 50%; flex: none; font-style: normal; }
+  .swatch-cash { background: var(--accent); }
+  .swatch-own { background: var(--own); }
+  .swipe { display: none; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 740px) { .swipe { display: block; } }
+
+  /* Section headings */
+  h2.sec { margin: 44px 0 4px; font-size: 20px; letter-spacing: -.02em; }
+  p.sec { margin: 0 0 18px; color: var(--muted); font-size: 14.5px; max-width: 62ch; }
+
+  /* Outcome grid */
+  /* two pairs, matching the two branch rows in the diagram — not an auto-fit 3+1 */
+  .outcomes { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 720px) { .outcomes { grid-template-columns: repeat(2, 1fr); } }
+  .oc { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 18px 18px 16px;
+        display: flex; flex-direction: column; }
+  .oc .tag { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+             padding: 4px 9px; border-radius: 999px; align-self: flex-start; }
+  .oc h3 { margin: 12px 0 6px; font-size: 16px; letter-spacing: -.012em; }
+  .oc p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .oc .lands { margin-top: auto; padding-top: 14px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .oc .lands svg { width: 13px; height: 13px; flex: none; }
+  .oc.cash .tag { color: var(--accent-dark); background: var(--accent-tint); }
+  .oc.cash .lands { color: var(--accent-dark); }
+  .oc.own .tag { color: var(--own-dark); background: var(--own-tint); }
+  .oc.own .lands { color: var(--own-dark); }
+
+  /* Worked example */
+  .example { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+  .example .head { padding: 16px 20px 14px; border-bottom: 1px solid var(--line); }
+  .example .head strong { font-size: 15px; }
+  .example .head span { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); }
+  .tbl-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 460px; }
+  th, td { text-align: right; padding: 10px 20px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; white-space: normal; }
+  thead th { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-top: 12px; padding-bottom: 8px; }
+  tbody td:first-child { color: var(--muted); }
+  tbody tr:last-child td { border-bottom: none; }
+  tr.total td { font-weight: 700; border-top: 1px solid var(--line); background: var(--accent-tint); color: var(--accent-dark); border-bottom: none; }
+  tr.total td:first-child { color: var(--accent-dark); }
+  .example .foot { padding: 13px 20px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); }
+
+  /* Watch-outs */
+  .watch { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+  .wc { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 18px; }
+  .wc h3 { margin: 0 0 6px; font-size: 15px; letter-spacing: -.012em; display: flex; align-items: center; gap: 8px; }
+  .wc h3 svg { width: 16px; height: 16px; flex: none; color: var(--own); }
+  .wc p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+  footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); max-width: 62ch; }
+
+  /* ---- Diagram ---- */
+  .d-act { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+  .d-state { fill: var(--own-tint); stroke: var(--own); stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .d-result { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.5; }
+  .d-pill-cash { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.5; }
+  .d-pill-own { fill: var(--own-tint); stroke: var(--own); stroke-width: 1.5; }
+
+  .d-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; }
+  .d-title { font-size: 17px; font-weight: 700; letter-spacing: -.015em; fill: var(--ink); }
+  .d-sub { font-size: 12.5px; fill: var(--muted); }
+  .d-cond { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+  .d-body { font-size: 12.5px; fill: var(--ink); }
+  .d-note { font-size: 12px; font-weight: 600; }
+  .d-meta { font-size: 11px; fill: var(--muted); letter-spacing: .02em; }
+  .d-rail { font-size: 11px; font-weight: 600; fill: var(--muted); letter-spacing: .03em; }
+  .d-rail-hi { font-size: 11px; font-weight: 700; fill: var(--accent-dark); letter-spacing: .09em; }
+  .c-cash { fill: var(--accent-dark); }
+  .c-own { fill: var(--own-dark); }
+
+  .w { fill: none; stroke-width: 2; stroke-linecap: round; }
+  .w-neutral { stroke: var(--wire); }
+  .w-cash { stroke: var(--accent); }
+  .w-own { stroke: var(--own); }
+  .w-wheel { stroke: var(--accent); stroke-width: 2.75; }
+  .mk-neutral { fill: var(--wire); }
+  .mk-cash { fill: var(--accent); }
+  .mk-own { fill: var(--own); }
+</style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7.5" fill="#10b981"/><path d="M8 23.5c6-1 11.5-5.5 16-15" stroke="#fff" stroke-width="3.2" stroke-linecap="round" fill="none"/></svg>
+        <span class="brand-text">Financial<i>&nbsp;/</i>&nbsp;Calculators</span>
+      </a>
+      <div class="nav-links">
+        <a href="retirement-calculator.html">Nest<span class="long"> Egg</span></a>
+        <a href="compound-interest-calculator.html">Compound<span class="long"> Interest</span></a>
+        <a href="paycheck-calculator.html">Paycheck</a>
+        <a href="options-wheel.html" class="active">Wheel</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="app">
+    <header class="page">
+      <div class="eyebrow">Strategy map</div>
+      <h1>The options wheel on RY</h1>
+      <p>Sell a put. If it expires, sell another. If you get assigned, sell calls against the shares until they're called away — then start over. Every branch below just tells you which of two positions you land in.</p>
+    </header>
+
+    <figure class="wheel">
+      <div class="fig-scroll">
+        <svg viewBox="0 30 920 880" role="img"
+             aria-label="Flow diagram of the options wheel on RY. You sell a cash-secured put with a strike just below spot, 25 to 40 days out. At expiry, if RY stays above the strike the put expires worthless, you keep the premium and sell another put. If RY closes below the strike you are assigned 100 shares at the strike. You then sell a covered call above your cost basis. At expiry, if RY stays below the call strike the call expires worthless, you keep the premium and the shares and sell another call. If RY closes above the call strike the shares are called away, you bank the difference between the two strikes plus every premium collected, and the wheel restarts with a new put.">
+          <defs>
+            <marker id="a-neutral" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="11" refY="4.5" orient="auto">
+              <polygon class="mk-neutral" points="0,0 11,4.5 0,9"/>
+            </marker>
+            <marker id="a-cash" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="11" refY="4.5" orient="auto">
+              <polygon class="mk-cash" points="0,0 11,4.5 0,9"/>
+            </marker>
+            <marker id="a-own" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="9" refX="11" refY="4.5" orient="auto">
+              <polygon class="mk-own" points="0,0 11,4.5 0,9"/>
+            </marker>
+          </defs>
+
+          <!-- ============ return paths drawn first so boxes sit on top ============ -->
+          <path class="w w-cash"  d="M335 294 V310 Q335 320 325 320 H90 Q80 320 80 310 V116 Q80 106 90 106 H300" marker-end="url(#a-cash)"/>
+          <path class="w w-own"   d="M335 714 V734 Q335 744 325 744 H90 Q80 744 80 734 V536 Q80 526 90 526 H300" marker-end="url(#a-own)"/>
+          <path class="w w-wheel" d="M605 852 V870 Q605 880 615 880 H845 Q855 880 855 870 V116 Q855 106 845 106 H640" marker-end="url(#a-cash)"/>
+
+          <text class="d-rail c-cash" x="95" y="213" text-anchor="middle" transform="rotate(-90 95 213)">keep premium · sell another put</text>
+          <text class="d-rail c-own"  x="95" y="635" text-anchor="middle" transform="rotate(-90 95 635)">keep the shares · sell another call</text>
+          <text class="d-rail-hi"     x="840" y="490" text-anchor="middle" transform="rotate(-90 840 490)">THE WHEEL TURNS · START AGAIN WITH A NEW PUT</text>
+
+          <!-- ============ step 1: sell the put ============ -->
+          <rect class="d-act" x="300" y="56" width="340" height="100" rx="14"/>
+          <text class="d-eyebrow c-cash" x="470" y="82"  text-anchor="middle">STEP 1 · YOU'RE HOLDING CASH</text>
+          <text class="d-title"          x="470" y="106" text-anchor="middle">Sell a cash-secured put</text>
+          <text class="d-sub"            x="470" y="128" text-anchor="middle">Strike just below spot · 25–40 days out</text>
+          <text class="d-note c-cash"    x="470" y="147" text-anchor="middle">Premium lands in your account now</text>
+
+          <path class="w w-neutral" d="M470 156 V186"/>
+          <path class="w w-neutral" d="M335 186 H605"/>
+          <path class="w w-neutral" d="M335 186 V214" marker-end="url(#a-neutral)"/>
+          <path class="w w-neutral" d="M605 186 V214" marker-end="url(#a-neutral)"/>
+          <text class="d-meta" x="482" y="180">at expiry</text>
+
+          <!-- outcomes of the put -->
+          <rect class="d-pill-cash" x="210" y="214" width="250" height="80" rx="14"/>
+          <text class="d-cond c-cash" x="335" y="241" text-anchor="middle">RY stays above your strike</text>
+          <text class="d-body"        x="335" y="262" text-anchor="middle">The put expires worthless.</text>
+          <text class="d-body"        x="335" y="280" text-anchor="middle">You keep the whole premium.</text>
+
+          <rect class="d-pill-own" x="480" y="214" width="250" height="80" rx="14"/>
+          <text class="d-cond c-own" x="605" y="241" text-anchor="middle">RY closes below your strike</text>
+          <text class="d-body"       x="605" y="262" text-anchor="middle">You're assigned — you buy</text>
+          <text class="d-body"       x="605" y="280" text-anchor="middle">100 shares at the strike.</text>
+
+          <path class="w w-own" d="M605 294 V306 Q605 316 595 316 H480 Q470 316 470 326 V344" marker-end="url(#a-own)"/>
+
+          <!-- ============ the share position ============ -->
+          <rect class="d-state" x="300" y="344" width="340" height="100" rx="14"/>
+          <text class="d-eyebrow c-own" x="470" y="370" text-anchor="middle">YOU'RE NOW HOLDING SHARES</text>
+          <text class="d-title"         x="470" y="394" text-anchor="middle">100 shares of RY</text>
+          <text class="d-sub"           x="470" y="416" text-anchor="middle">Cost basis = strike − premium collected</text>
+          <text class="d-note c-own"    x="470" y="435" text-anchor="middle">Dividends start landing too</text>
+
+          <path class="w w-own" d="M470 444 V476" marker-end="url(#a-own)"/>
+
+          <!-- ============ step 2: sell the call ============ -->
+          <rect class="d-act" x="300" y="476" width="340" height="100" rx="14"/>
+          <text class="d-eyebrow c-own" x="470" y="502" text-anchor="middle">STEP 2 · YOU'RE HOLDING SHARES</text>
+          <text class="d-title"         x="470" y="526" text-anchor="middle">Sell a covered call</text>
+          <text class="d-sub"           x="470" y="548" text-anchor="middle">Strike above your cost basis · 25–40 days</text>
+          <text class="d-note c-cash"   x="470" y="567" text-anchor="middle">Another premium lands now</text>
+
+          <path class="w w-neutral" d="M470 576 V606"/>
+          <path class="w w-neutral" d="M335 606 H605"/>
+          <path class="w w-neutral" d="M335 606 V634" marker-end="url(#a-neutral)"/>
+          <path class="w w-neutral" d="M605 606 V634" marker-end="url(#a-neutral)"/>
+          <text class="d-meta" x="482" y="600">at expiry</text>
+
+          <!-- outcomes of the call -->
+          <rect class="d-pill-own" x="210" y="634" width="250" height="80" rx="14"/>
+          <text class="d-cond c-own" x="335" y="661" text-anchor="middle">RY stays below the call</text>
+          <text class="d-body"       x="335" y="682" text-anchor="middle">The call expires worthless.</text>
+          <text class="d-body"       x="335" y="700" text-anchor="middle">You keep premium and shares.</text>
+
+          <rect class="d-pill-cash" x="480" y="634" width="250" height="80" rx="14"/>
+          <text class="d-cond c-cash" x="605" y="661" text-anchor="middle">RY closes above the call</text>
+          <text class="d-body"        x="605" y="682" text-anchor="middle">Your shares are called</text>
+          <text class="d-body"        x="605" y="700" text-anchor="middle">away at the call strike.</text>
+
+          <path class="w w-cash" d="M605 714 V752" marker-end="url(#a-cash)"/>
+
+          <!-- ============ the payoff ============ -->
+          <rect class="d-result" x="455" y="752" width="300" height="100" rx="14"/>
+          <text class="d-eyebrow c-cash" x="605" y="778" text-anchor="middle">THE WHEEL COMES FULL CIRCLE</text>
+          <text class="d-title"          x="605" y="801" text-anchor="middle">Back to cash, with a profit</text>
+          <text class="d-sub"            x="605" y="822" text-anchor="middle">(call strike − put strike) × 100</text>
+          <text class="d-sub"            x="605" y="840" text-anchor="middle">+ every premium + any dividends</text>
+        </svg>
+      </div>
+
+      <figcaption>Two positions, four branches. You are always either holding cash and selling puts, or holding shares and selling calls — and each expiry only decides which of the two you're in next.</figcaption>
+      <div class="legend">
+        <span><i class="swatch-cash"></i>You end up holding cash</span>
+        <span><i class="swatch-own"></i>You end up holding shares</span>
+      </div>
+      <p class="swipe">Swipe the diagram sideways to follow the whole loop.</p>
+    </figure>
+
+    <h2 class="sec">The four branches</h2>
+    <p class="sec">Each expiry resolves one of these. Nothing else can happen.</p>
+
+    <div class="outcomes">
+      <div class="oc cash">
+        <span class="tag">Put expires</span>
+        <h3>RY finishes above your put strike</h3>
+        <p>Nobody makes you buy shares at a price above the market. The contract dies, the premium is yours free and clear, and the cash you set aside is released.</p>
+        <span class="lands">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><path d="M21 4v5h-5"/></svg>
+          Sell another put — nothing changed
+        </span>
+      </div>
+
+      <div class="oc own">
+        <span class="tag">Put assigned</span>
+        <h3>RY finishes below your put strike</h3>
+        <p>You buy 100 shares at the strike, whatever RY is actually trading at. Because you already banked the premium, your real cost basis is the strike minus that premium.</p>
+        <span class="lands">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+          Move to selling covered calls
+        </span>
+      </div>
+
+      <div class="oc own">
+        <span class="tag">Call expires</span>
+        <h3>RY finishes below your call strike</h3>
+        <p>Nobody takes the shares at a price above the market. You keep the premium and you keep the stock — plus any dividend that paid while you held it.</p>
+        <span class="lands">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><path d="M21 4v5h-5"/></svg>
+          Sell another call on the same shares
+        </span>
+      </div>
+
+      <div class="oc cash">
+        <span class="tag">Called away</span>
+        <h3>RY finishes above your call strike</h3>
+        <p>The shares get bought from you at the call strike. You bank the gap between the two strikes on top of every premium you collected on the way round.</p>
+        <span class="lands">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-4.9"/></svg>
+          Full turn done — back to step 1
+        </span>
+      </div>
+    </div>
+
+    <h2 class="sec">One full turn, in dollars</h2>
+    <p class="sec">Illustrative prices, one contract. Swap in real quotes — the shape of the result doesn't change.</p>
+
+    <div class="example">
+      <div class="head">
+        <strong>RY trading near $180.00</strong>
+        <span>Sell the $175 put, get assigned, then sell the $182 call and get called away.</span>
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr><th>Leg</th><th>Detail</th><th>Cash flow</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Put premium</td><td>100 × $2.10</td><td>+$210</td></tr>
+            <tr><td>Assigned</td><td>Buy 100 @ $175.00</td><td>−$17,500</td></tr>
+            <tr><td>Call premium</td><td>100 × $1.60</td><td>+$160</td></tr>
+            <tr><td>Dividend</td><td>One quarter @ $1.48</td><td>+$148</td></tr>
+            <tr><td>Called away</td><td>Sell 100 @ $182.00</td><td>+$18,200</td></tr>
+            <tr class="total"><td>Net</td><td>On $17,500 set aside</td><td>+$1,218 · 6.96%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="foot">Your cost basis after assignment was $172.90 — the $175 strike less the $2.10 you already collected. That's the price RY has to stay above for the position to be in the black.</div>
+    </div>
+
+    <h2 class="sec">What to watch</h2>
+    <p class="sec">The wheel is steady, not safe. Three things bite.</p>
+
+    <div class="watch">
+      <div class="wc">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l6.5 6.5 4-4L21 17"/><path d="M21 12v5h-5"/></svg>
+          RY can keep falling
+        </h3>
+        <p>Assignment isn't the risk — being stuck under your basis is. If RY drops well below $172.90, every call strike worth selling sits below what you paid, so you can't get called away without booking a loss.</p>
+      </div>
+      <div class="wc">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15h16"/><path d="M7 15V9M12 15V6M17 15v-4"/><path d="M4 19h16"/></svg>
+          Your upside is capped
+        </h3>
+        <p>If RY gaps to $200, you still hand the shares over at $182. The wheel deliberately trades open-ended upside for a steadier, smaller stream of premiums.</p>
+      </div>
+      <div class="wc">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/></svg>
+          It ties up real cash
+        </h3>
+        <p>One contract is 100 shares, so a single RY put needs roughly $17,000–18,000 sitting in the account to be genuinely cash-secured. That capital is committed for the whole turn.</p>
+      </div>
+    </div>
+
+    <footer>Rolling — buying back an option and reselling it further out — is the common escape hatch on either leg, and it changes the arrows above. This page shows the plain wheel with no rolling. Estimates only, not financial advice.</footer>
+  </div>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* offline support unavailable */ });
+    });
+  }
+</script>
+</body>
+</html>
