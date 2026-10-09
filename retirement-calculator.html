@@ -91,6 +91,7 @@
   .field:last-child { margin-bottom: 0; }
   .field label { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
   .field .val { color: var(--accent-dark); font-variant-numeric: tabular-nums; }
+  .field .opt { color: var(--muted); font-size: 12px; font-weight: 500; }
   .field .hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
   .money-input { position: relative; }
   .money-input span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; }
@@ -186,7 +187,7 @@
   <div class="app">
     <header>
       <h1>Retirement Nest-Egg Calculator</h1>
-      <p>Work it either direction: enter the yearly income you want and see how much you need invested, or enter what you have invested and see the yearly income it can support. Based on the <strong>4% rule</strong>, you need roughly 25× your annual spending invested. The chart projects how the balance evolves as it earns returns and you make inflation-adjusted withdrawals. Pick a province to account for income tax on those withdrawals.</p>
+      <p>Work it either direction: enter the yearly income you want and see how much you need invested, or enter what you have invested and see the yearly income it can support — and, if you plan to take out less, how the rest keeps growing. Based on the <strong>4% rule</strong>, you need roughly 25× your annual spending invested. The chart projects how the balance evolves as it earns returns and you make inflation-adjusted withdrawals. Pick a province to account for income tax on those withdrawals.</p>
     </header>
 
     <div class="layout">
@@ -215,6 +216,15 @@
             <input type="number" id="nestInput" value="1000000" min="0" step="10000" />
           </div>
           <div class="hint">What you have (or expect to have) in your portfolio on day one of retirement.</div>
+        </div>
+
+        <div class="field" id="plannedField" hidden>
+          <label for="planned">Planned yearly income <span class="opt">Optional</span></label>
+          <div class="money-input">
+            <span>$</span>
+            <input type="number" id="planned" min="0" step="1000" />
+          </div>
+          <div class="hint" id="plannedHint">What you'll actually take out each year. Leave blank to use the full withdrawal rate.</div>
         </div>
 
         <div class="field">
@@ -273,6 +283,7 @@
           <span class="big" id="nestEgg">$1,000,000</span>
           <span class="mult" id="multiple">25.0× annual income</span>
           <div class="tax" id="taxLine" hidden></div>
+          <div class="tax" id="planLine" hidden></div>
         </div>
 
         <div class="stats">
@@ -486,6 +497,7 @@
     $('modeNest').setAttribute('aria-pressed', m === 'nest');
     $('incomeField').hidden = m !== 'income';
     $('nestField').hidden = m !== 'nest';
+    $('plannedField').hidden = m !== 'nest';
     render();
   }
 
@@ -497,21 +509,33 @@
     // `income` is always the pre-tax withdrawal the portfolio has to fund.
     // With a province chosen, the typed income is what the user wants to
     // keep after tax, so it gets grossed up first.
-    let income, nestEgg, afterTax;
+    let income, nestEgg, afterTax, capacity = null;
     if (mode === 'nest') {
       nestEgg = Math.max(0, parseFloat($('nestInput').value) || 0);
       income = nestEgg * wd;
       afterTax = income - incomeTax(income, prov);
+      // An optional planned income replaces the full withdrawal-rate amount
+      // in the projection; `capacity` keeps the full amount for the headline.
+      // Like the desired income, it is after tax when a province is chosen.
+      const planned = parseFloat($('planned').value);
+      if (planned >= 0) {
+        capacity = { income: income, afterTax: afterTax, tax: income - afterTax };
+        afterTax = planned;
+        income = taxed ? grossUp(planned, prov) : planned;
+      }
     } else {
       afterTax = Math.max(0, parseFloat($('income').value) || 0);
       income = taxed ? grossUp(afterTax, prov) : afterTax;
       nestEgg = wd > 0 ? income / wd : 0;
     }
+    const tax = income - afterTax;
     return {
       mode: mode,
       income: income,
       afterTax: afterTax,
-      tax: income - afterTax,
+      tax: tax,
+      planned: capacity !== null,
+      capacity: capacity || { income: income, afterTax: afterTax, tax: tax },
       prov: prov,
       taxed: taxed,
       nestEgg: nestEgg,
@@ -687,7 +711,7 @@
 
     if (inp.mode === 'nest') {
       $('headlineLabel').textContent = inp.taxed ? 'You can expect each year, after tax' : 'You can expect each year';
-      $('nestEgg').textContent = fmtFull.format(Math.round(inp.afterTax));
+      $('nestEgg').textContent = fmtFull.format(Math.round(inp.capacity.afterTax));
       $('multiple').textContent = inp.taxed
         ? (inp.wd * 100).toFixed(1) + '% withdrawal, less tax'
         : (inp.wd * 100).toFixed(1) + '% of nest egg';
@@ -701,15 +725,41 @@
     const taxLine = $('taxLine');
     taxLine.hidden = !inp.taxed;
     if (inp.taxed) {
-      const rate = inp.income > 0 ? inp.tax / inp.income : 0;
-      taxLine.innerHTML = 'Withdraw <b>' + fmtFull.format(Math.round(inp.income)) + '</b> pre-tax → '
-        + PROVINCES[inp.prov].name + ' + federal tax <b>' + fmtFull.format(Math.round(inp.tax)) + '</b> ('
-        + (rate * 100).toFixed(1) + '% effective) → <b>' + fmtFull.format(Math.round(inp.afterTax)) + '</b> to spend';
+      const c = inp.capacity;
+      const rate = c.income > 0 ? c.tax / c.income : 0;
+      taxLine.innerHTML = 'Withdraw <b>' + fmtFull.format(Math.round(c.income)) + '</b> pre-tax → '
+        + PROVINCES[inp.prov].name + ' + federal tax <b>' + fmtFull.format(Math.round(c.tax)) + '</b> ('
+        + (rate * 100).toFixed(1) + '% effective) → <b>' + fmtFull.format(Math.round(c.afterTax)) + '</b> to spend';
     }
+
+    // plan line: how the planned income compares with the full amount
+    const planLine = $('planLine');
+    planLine.hidden = !inp.planned;
+    if (inp.planned) {
+      const full = inp.capacity.afterTax;
+      const share = full > 0 ? inp.afterTax / full : 0;
+      let text = 'Your plan: <b>' + fmtFull.format(Math.round(inp.afterTax)) + '</b> a year' + (inp.taxed ? ' to spend' : '');
+      if (full > 0) {
+        text += share <= 1
+          ? ' — ' + Math.round(share * 100) + '% of the full amount'
+          : ' — ' + Math.round((share - 1) * 100) + '% more than the full amount';
+      }
+      if (inp.nestEgg > 0) {
+        text += inp.taxed
+          ? '. That\'s <b>' + fmtFull.format(Math.round(inp.income)) + '</b> pre-tax, a ' + (inp.income / inp.nestEgg * 100).toFixed(1) + '% withdrawal rate.'
+          : ', a ' + (inp.income / inp.nestEgg * 100).toFixed(1) + '% withdrawal rate.';
+      }
+      planLine.innerHTML = text;
+    }
+
     $('incomeHint').textContent = inp.taxed
       ? 'After-tax income you want to live on each year. The calculator grosses it up for ' + PROVINCES[inp.prov].name + ' income tax.'
       : 'Pre-tax income you want your portfolio to provide each year.';
-    $('monthlyLabel').textContent = inp.taxed ? 'First-year income, after tax' : 'First-year income';
+    $('plannedHint').textContent = inp.taxed
+      ? 'After-tax income you\'ll actually live on each year, grossed up for ' + PROVINCES[inp.prov].name + ' income tax. Leave blank to use the full withdrawal rate.'
+      : 'What you\'ll actually take out each year. Leave blank to use the full withdrawal rate.';
+    $('planned').placeholder = Math.round(inp.capacity.afterTax);
+    $('monthlyLabel').textContent = (inp.planned ? 'Planned first-year income' : 'First-year income') + (inp.taxed ? ', after tax' : '');
     $('monthly').textContent = fmtFull.format(Math.round(inp.afterTax / 12)) + '/mo';
     $('afterTaxHead').hidden = !inp.taxed;
     $('tableNote').textContent = inp.taxed
@@ -788,7 +838,7 @@
   bindPair('withdraw', 'withdrawRange', 'withdrawVal');
   bindPair('return', 'returnRange', 'returnVal');
   bindPair('inflation', 'inflationRange', 'inflationVal');
-  ['income', 'nestInput', 'years'].forEach(id => $(id).addEventListener('input', render));
+  ['income', 'nestInput', 'planned', 'years'].forEach(id => $(id).addEventListener('input', render));
   $('modeIncome').addEventListener('click', () => setMode('income'));
   $('modeNest').addEventListener('click', () => setMode('nest'));
   $('realToggle').addEventListener('change', render);
