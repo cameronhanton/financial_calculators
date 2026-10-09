@@ -107,6 +107,11 @@
   .money-input input { padding-left: 26px; }
   input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
   input[type="range"] { width: 100%; margin: 8px 0 0; accent-color: var(--accent); }
+  select.pick {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px;
+    font: inherit; font-size: 15px; color: var(--ink); background: #fff;
+  }
+  select.pick:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
 
   /* Mode toggle: solve for nest egg, or solve for income */
   .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: #f1f5f9; border-radius: 10px; margin-bottom: 18px; }
@@ -124,6 +129,9 @@
   .headline .label { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); width: 100%; }
   .headline .big { font-size: 40px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .headline .mult { font-size: 14px; color: var(--accent-dark); font-weight: 600; background: rgba(16,185,129,.1); padding: 3px 10px; border-radius: 999px; }
+  .headline .tax { width: 100%; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .headline .tax b { color: var(--ink); font-weight: 600; }
+  .headline .tax[hidden] { display: none; }
 
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   @media (max-width: 520px) { .stats { grid-template-columns: 1fr; } }
@@ -178,7 +186,7 @@
   <div class="app">
     <header>
       <h1>Retirement Nest-Egg Calculator</h1>
-      <p>Work it either direction: enter the yearly income you want and see how much you need invested, or enter what you have invested and see the yearly income it can support. Based on the <strong>4% rule</strong>, you need roughly 25× your annual spending invested. The chart projects how the balance evolves as it earns returns and you make inflation-adjusted withdrawals.</p>
+      <p>Work it either direction: enter the yearly income you want and see how much you need invested, or enter what you have invested and see the yearly income it can support. Based on the <strong>4% rule</strong>, you need roughly 25× your annual spending invested. The chart projects how the balance evolves as it earns returns and you make inflation-adjusted withdrawals. Pick a province to account for income tax on those withdrawals.</p>
     </header>
 
     <div class="layout">
@@ -197,7 +205,7 @@
             <span>$</span>
             <input type="number" id="income" value="40000" min="0" step="1000" />
           </div>
-          <div class="hint">Pre-tax income you want your portfolio to provide each year.</div>
+          <div class="hint" id="incomeHint">Pre-tax income you want your portfolio to provide each year.</div>
         </div>
 
         <div class="field" id="nestField" hidden>
@@ -207,6 +215,27 @@
             <input type="number" id="nestInput" value="1000000" min="0" step="10000" />
           </div>
           <div class="hint">What you have (or expect to have) in your portfolio on day one of retirement.</div>
+        </div>
+
+        <div class="field">
+          <label for="province">Income tax <span class="val">2026 rates</span></label>
+          <select id="province" class="pick">
+            <option value="" selected>None — don't calculate tax</option>
+            <option value="AB">Alberta</option>
+            <option value="BC">British Columbia</option>
+            <option value="MB">Manitoba</option>
+            <option value="NB">New Brunswick</option>
+            <option value="NL">Newfoundland and Labrador</option>
+            <option value="NS">Nova Scotia</option>
+            <option value="NT">Northwest Territories</option>
+            <option value="NU">Nunavut</option>
+            <option value="ON">Ontario</option>
+            <option value="PE">Prince Edward Island</option>
+            <option value="QC">Quebec</option>
+            <option value="SK">Saskatchewan</option>
+            <option value="YT">Yukon</option>
+          </select>
+          <div class="hint" id="provinceHint">Withdrawals are treated as fully taxable income (like RRSP/RRIF money) using federal + provincial brackets.</div>
         </div>
 
         <div class="field">
@@ -243,11 +272,12 @@
           <span class="label" id="headlineLabel">You need invested</span>
           <span class="big" id="nestEgg">$1,000,000</span>
           <span class="mult" id="multiple">25.0× annual income</span>
+          <div class="tax" id="taxLine" hidden></div>
         </div>
 
         <div class="stats">
           <div class="stat card">
-            <div class="k">First-year income</div>
+            <div class="k" id="monthlyLabel">First-year income</div>
             <div class="v small" id="monthly">$3,333/mo</div>
           </div>
           <div class="stat card">
@@ -274,12 +304,12 @@
     <section class="card table-card">
       <div class="table-head">
         <h3>Year-by-year detail</h3>
-        <span class="note">Nominal dollars (what your statement would show)</span>
+        <span class="note" id="tableNote">Nominal dollars (what your statement would show)</span>
       </div>
       <div class="scroll">
         <table>
           <thead>
-            <tr><th>Year</th><th>Age of nest egg</th><th>Withdrawal</th><th>Growth</th><th>End balance</th></tr>
+            <tr><th>Year</th><th>Age of nest egg</th><th>Withdrawal</th><th id="afterTaxHead" hidden>After tax</th><th>Growth</th><th>End balance</th></tr>
           </thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -288,6 +318,7 @@
 
     <footer>
       Estimates only — not financial advice. The 4% rule comes from the Trinity study and assumes a diversified stock/bond portfolio.
+      Income tax uses 2026 federal and provincial brackets with only the basic personal amount claimed — no age amount, pension credit, OAS or CPP — and assumes brackets keep pace with inflation.
     </footer>
   </div>
 
@@ -303,6 +334,145 @@
     if (a >= 1e6) return '$' + (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
     if (a >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
     return '$' + Math.round(v);
+  }
+
+  // ------------------------------------------------------------------
+  // TAX ENGINE (2026). Withdrawals are treated as fully taxable income,
+  // the way RRSP/RRIF money is. Only the basic personal amount is claimed
+  // (no age amount, no pension credit), and there is no CPP or EI because
+  // this is not employment income. Brackets are assumed to keep pace with
+  // inflation, so tax is worked out in today's dollars.
+  // To roll forward a year: update this block and the "2026" label below.
+  // Sources: CRA 2026 bracket table, taxtips.ca 2026 credit base amounts.
+  // ------------------------------------------------------------------
+  const FED = {
+    brackets: [
+      { upto: 58523,    rate: 0.14 },
+      { upto: 117045,   rate: 0.205 },
+      { upto: 181440,   rate: 0.26 },
+      { upto: 258482,   rate: 0.29 },
+      { upto: Infinity, rate: 0.33 }
+    ],
+    lowRate: 0.14,
+    bpaMax: 16452, bpaMin: 14829,          // BPA grinds down across the 29% bracket
+    bpaPhaseFrom: 181440, bpaPhaseTo: 258482,
+    quebecAbatement: 0.165                 // Quebec residents get 16.5% off federal tax
+  };
+
+  const PROVINCES = {
+    AB: { name: 'Alberta', lowRate: 0.08, bpa: 22769, brackets: [
+      { upto: 61200, rate: 0.08 }, { upto: 154259, rate: 0.10 }, { upto: 185111, rate: 0.12 },
+      { upto: 246813, rate: 0.13 }, { upto: 370220, rate: 0.14 }, { upto: Infinity, rate: 0.15 } ] },
+    BC: { name: 'British Columbia', lowRate: 0.056, bpa: 13216, brackets: [
+      { upto: 50363, rate: 0.056 }, { upto: 100728, rate: 0.077 }, { upto: 115648, rate: 0.105 },
+      { upto: 140430, rate: 0.1229 }, { upto: 190405, rate: 0.147 }, { upto: 265545, rate: 0.168 },
+      { upto: Infinity, rate: 0.205 } ] },
+    MB: { name: 'Manitoba', lowRate: 0.108, bpa: 15780,
+      // Manitoba froze indexation in 2025; BPA fades out from $200k to $400k of income.
+      bpaPhaseFrom: 200000, bpaPhaseTo: 400000, brackets: [
+      { upto: 47000, rate: 0.108 }, { upto: 100000, rate: 0.1275 }, { upto: Infinity, rate: 0.174 } ] },
+    NB: { name: 'New Brunswick', lowRate: 0.094, bpa: 13664, brackets: [
+      { upto: 52333, rate: 0.094 }, { upto: 104666, rate: 0.14 }, { upto: 193861, rate: 0.16 },
+      { upto: Infinity, rate: 0.195 } ] },
+    NL: { name: 'Newfoundland and Labrador', lowRate: 0.087, bpa: 11188, brackets: [
+      { upto: 44678, rate: 0.087 }, { upto: 89354, rate: 0.145 }, { upto: 159528, rate: 0.158 },
+      { upto: 223340, rate: 0.178 }, { upto: 285319, rate: 0.198 }, { upto: 570638, rate: 0.208 },
+      { upto: 1141275, rate: 0.213 }, { upto: Infinity, rate: 0.218 } ] },
+    NS: { name: 'Nova Scotia', lowRate: 0.0879, bpa: 11932, brackets: [
+      { upto: 30995, rate: 0.0879 }, { upto: 61991, rate: 0.1495 }, { upto: 97417, rate: 0.1667 },
+      { upto: 157124, rate: 0.175 }, { upto: Infinity, rate: 0.21 } ] },
+    NT: { name: 'Northwest Territories', lowRate: 0.059, bpa: 18198, brackets: [
+      { upto: 53003, rate: 0.059 }, { upto: 106009, rate: 0.086 }, { upto: 172346, rate: 0.122 },
+      { upto: Infinity, rate: 0.1405 } ] },
+    NU: { name: 'Nunavut', lowRate: 0.04, bpa: 19659, brackets: [
+      { upto: 55801, rate: 0.04 }, { upto: 111602, rate: 0.07 }, { upto: 181439, rate: 0.09 },
+      { upto: Infinity, rate: 0.115 } ] },
+    ON: { name: 'Ontario', lowRate: 0.0505, bpa: 12989,
+      surtax1At: 5818, surtax1Rate: 0.20, surtax2At: 7446, surtax2Rate: 0.36,
+      reduction: 300, healthPremium: true, brackets: [
+      { upto: 53891, rate: 0.0505 }, { upto: 107785, rate: 0.0915 }, { upto: 150000, rate: 0.1116 },
+      { upto: 220000, rate: 0.1216 }, { upto: Infinity, rate: 0.1316 } ] },
+    PE: { name: 'Prince Edward Island', lowRate: 0.095, bpa: 15000, brackets: [
+      { upto: 33928, rate: 0.095 }, { upto: 65820, rate: 0.1347 }, { upto: 106890, rate: 0.166 },
+      { upto: 142520, rate: 0.1762 }, { upto: 200000, rate: 0.19 }, { upto: Infinity, rate: 0.20 } ] },
+    QC: { name: 'Quebec', lowRate: 0.14, bpa: 18952, abatement: true, brackets: [
+      { upto: 54345, rate: 0.14 }, { upto: 108680, rate: 0.19 }, { upto: 132245, rate: 0.24 },
+      { upto: Infinity, rate: 0.2575 } ] },
+    SK: { name: 'Saskatchewan', lowRate: 0.105, bpa: 20381, brackets: [
+      { upto: 54532, rate: 0.105 }, { upto: 155805, rate: 0.125 }, { upto: Infinity, rate: 0.145 } ] },
+    YT: { name: 'Yukon', lowRate: 0.064, bpa: 16452, bpaMin: 14829,   // mirrors the federal BPA
+      bpaPhaseFrom: 181440, bpaPhaseTo: 258482, brackets: [
+      { upto: 58523, rate: 0.064 }, { upto: 117045, rate: 0.09 }, { upto: 181440, rate: 0.109 },
+      { upto: 500000, rate: 0.128 }, { upto: Infinity, rate: 0.15 } ] }
+  };
+
+  // Ontario Health Premium: a staircase that has not changed since 2004.
+  function ontarioHealthPremium(t) {
+    if (t <= 20000)  return 0;
+    if (t <= 25000)  return Math.min(300, (t - 20000) * 0.06);
+    if (t <= 36000)  return 300;
+    if (t <= 38500)  return 300 + Math.min(150, (t - 36000) * 0.06);
+    if (t <= 48000)  return 450;
+    if (t <= 48600)  return 450 + Math.min(150, (t - 48000) * 0.25);
+    if (t <= 72000)  return 600;
+    if (t <= 72600)  return 600 + Math.min(150, (t - 72000) * 0.25);
+    if (t <= 200000) return 750;
+    if (t <= 200600) return 750 + Math.min(150, (t - 200000) * 0.25);
+    return 900;
+  }
+
+  function bracketTax(income, brackets) {
+    let total = 0, prev = 0;
+    for (const b of brackets) {
+      if (income <= prev) break;
+      total += (Math.min(income, b.upto) - prev) * b.rate;
+      prev = b.upto;
+    }
+    return total;
+  }
+
+  // A personal amount that shrinks linearly across an income band.
+  function fadedAmount(max, min, from, to, income) {
+    if (!from || income <= from) return max;
+    if (income >= to) return min;
+    return max - (max - min) * ((income - from) / (to - from));
+  }
+
+  // Combined federal + provincial income tax on `income` for a resident of `code`.
+  function incomeTax(income, code) {
+    const p = PROVINCES[code];
+    if (!p || income <= 0) return 0;
+
+    const fedBpa = fadedAmount(FED.bpaMax, FED.bpaMin, FED.bpaPhaseFrom, FED.bpaPhaseTo, income);
+    let fed = Math.max(0, bracketTax(income, FED.brackets) - fedBpa * FED.lowRate);
+    if (p.abatement) fed *= 1 - FED.quebecAbatement;
+
+    const provBpa = fadedAmount(p.bpa, p.bpaMin != null ? p.bpaMin : 0, p.bpaPhaseFrom, p.bpaPhaseTo, income);
+    let prov = Math.max(0, bracketTax(income, p.brackets) - provBpa * p.lowRate);
+    if (p.surtax1At) {
+      prov += Math.max(0, prov - p.surtax1At) * p.surtax1Rate
+            + Math.max(0, prov - p.surtax2At) * p.surtax2Rate;
+    }
+    if (p.reduction) {
+      // The Ontario tax reduction wipes out small bills entirely, then fades.
+      prov -= Math.min(prov, Math.max(0, 2 * p.reduction - prov));
+    }
+    if (p.healthPremium) prov += ontarioHealthPremium(income);
+
+    return fed + prov;
+  }
+
+  // Pre-tax income needed to be left with `afterTax` once income tax comes off.
+  // Tax is monotone with marginal rates well under 100%, so bisection is safe.
+  function grossUp(afterTax, code) {
+    if (!PROVINCES[code] || afterTax <= 0) return Math.max(0, afterTax);
+    let lo = afterTax, hi = afterTax * 3;
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2;
+      if (mid - incomeTax(mid, code) < afterTax) lo = mid; else hi = mid;
+      if (hi - lo < 0.005) break;
+    }
+    return (lo + hi) / 2;
   }
 
   // --- Mode ---
@@ -322,17 +492,28 @@
   // --- Inputs ---
   function getInputs() {
     const wd = (parseFloat($('withdraw').value) || 0) / 100;
-    let income, nestEgg;
+    const prov = $('province').value;
+    const taxed = !!PROVINCES[prov];
+    // `income` is always the pre-tax withdrawal the portfolio has to fund.
+    // With a province chosen, the typed income is what the user wants to
+    // keep after tax, so it gets grossed up first.
+    let income, nestEgg, afterTax;
     if (mode === 'nest') {
       nestEgg = Math.max(0, parseFloat($('nestInput').value) || 0);
       income = nestEgg * wd;
+      afterTax = income - incomeTax(income, prov);
     } else {
-      income = Math.max(0, parseFloat($('income').value) || 0);
+      afterTax = Math.max(0, parseFloat($('income').value) || 0);
+      income = taxed ? grossUp(afterTax, prov) : afterTax;
       nestEgg = wd > 0 ? income / wd : 0;
     }
     return {
       mode: mode,
       income: income,
+      afterTax: afterTax,
+      tax: income - afterTax,
+      prov: prov,
+      taxed: taxed,
       nestEgg: nestEgg,
       ret: (parseFloat($('return').value) || 0) / 100,
       wd: wd,
@@ -505,15 +686,35 @@
     lastSim = sim; lastInp = inp;
 
     if (inp.mode === 'nest') {
-      $('headlineLabel').textContent = 'You can expect each year';
-      $('nestEgg').textContent = fmtFull.format(Math.round(inp.income));
-      $('multiple').textContent = (inp.wd * 100).toFixed(1) + '% of nest egg';
+      $('headlineLabel').textContent = inp.taxed ? 'You can expect each year, after tax' : 'You can expect each year';
+      $('nestEgg').textContent = fmtFull.format(Math.round(inp.afterTax));
+      $('multiple').textContent = inp.taxed
+        ? (inp.wd * 100).toFixed(1) + '% withdrawal, less tax'
+        : (inp.wd * 100).toFixed(1) + '% of nest egg';
     } else {
       $('headlineLabel').textContent = 'You need invested';
       $('nestEgg').textContent = fmtFull.format(Math.round(sim.nestEgg));
-      $('multiple').textContent = inp.wd > 0 ? (1 / inp.wd).toFixed(1) + '× annual income' : '—';
+      $('multiple').textContent = inp.wd > 0 ? (1 / inp.wd).toFixed(1) + '× pre-tax income' : '—';
     }
-    $('monthly').textContent = fmtFull.format(Math.round(inp.income / 12)) + '/mo';
+
+    // tax line under the headline, plus the labels that change meaning when taxed
+    const taxLine = $('taxLine');
+    taxLine.hidden = !inp.taxed;
+    if (inp.taxed) {
+      const rate = inp.income > 0 ? inp.tax / inp.income : 0;
+      taxLine.innerHTML = 'Withdraw <b>' + fmtFull.format(Math.round(inp.income)) + '</b> pre-tax → '
+        + PROVINCES[inp.prov].name + ' + federal tax <b>' + fmtFull.format(Math.round(inp.tax)) + '</b> ('
+        + (rate * 100).toFixed(1) + '% effective) → <b>' + fmtFull.format(Math.round(inp.afterTax)) + '</b> to spend';
+    }
+    $('incomeHint').textContent = inp.taxed
+      ? 'After-tax income you want to live on each year. The calculator grosses it up for ' + PROVINCES[inp.prov].name + ' income tax.'
+      : 'Pre-tax income you want your portfolio to provide each year.';
+    $('monthlyLabel').textContent = inp.taxed ? 'First-year income, after tax' : 'First-year income';
+    $('monthly').textContent = fmtFull.format(Math.round(inp.afterTax / 12)) + '/mo';
+    $('afterTaxHead').hidden = !inp.taxed;
+    $('tableNote').textContent = inp.taxed
+      ? 'Nominal dollars. Withdrawal is what leaves the portfolio; after tax is what you keep.'
+      : 'Nominal dollars (what your statement would show)';
 
     const last = sim.rows[sim.rows.length - 1];
     $('ending').textContent = fmtFull.format(Math.round(Math.max(0, last.display)));
@@ -538,11 +739,15 @@
 
     // table
     const tb = $('tbody');
+    // Brackets are assumed to index with inflation, so the year-1 effective
+    // rate holds for every year of the projection.
+    const keep = inp.income > 0 ? inp.afterTax / inp.income : 1;
     tb.innerHTML = sim.rows.map(r => {
       const cls = (sim.depletedYear && r.year === sim.depletedYear) ? ' class="depleted"' : '';
       return '<tr' + cls + '><td>' + r.year + '</td>'
         + '<td>' + (r.year === 0 ? 'Start' : r.year + ' yr' + (r.year === 1 ? '' : 's')) + '</td>'
         + '<td>' + (r.year === 0 ? '—' : fmtFull.format(Math.round(r.withdrawal))) + '</td>'
+        + (inp.taxed ? '<td>' + (r.year === 0 ? '—' : fmtFull.format(Math.round(r.withdrawal * keep))) + '</td>' : '')
         + '<td>' + (r.year === 0 ? '—' : fmtFull.format(Math.round(r.growth))) + '</td>'
         + '<td>' + fmtFull.format(Math.round(Math.max(0, r.balance))) + '</td></tr>';
     }).join('');
@@ -587,6 +792,7 @@
   $('modeIncome').addEventListener('click', () => setMode('income'));
   $('modeNest').addEventListener('click', () => setMode('nest'));
   $('realToggle').addEventListener('change', render);
+  $('province').addEventListener('change', render);
 
   const cv = $('chart');
   cv.addEventListener('mousemove', onMove);

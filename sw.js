@@ -1,6 +1,6 @@
 /* Service worker for Financial Calculators.
    Bump CACHE_VERSION whenever a page changes so installed copies refresh. */
-const CACHE_VERSION = 'fincalcs-v5';
+const CACHE_VERSION = 'fincalcs-v6';
 
 const ASSETS = [
   './index.html',
